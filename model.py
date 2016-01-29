@@ -6,12 +6,22 @@
 from example_graphs import make_chimera_graph
 import visual as v
 
-def draw_chimera_graph(graph, n):
+import numpy as np
+import matplotlib.pyplot as plt
+
+from problem import Problem
+
+#from commands import getoutput
+#from time import sleep
+
+def draw_chimera_graph(graph, n, magnet_frames=None):
     """ Draws a chimera graph to a window and displays it.
 
     Args:
         graph: Graph object
         n: dimension of Chimera graph
+        magnet_frames: supply an empty list, which gets populated
+            by (Frame, angle) tuples for drawing
 
     Returns:
         frame
@@ -22,47 +32,55 @@ def draw_chimera_graph(graph, n):
 
     global_frame = v.frame()
 
-    for i, node in enumerate(all_nodes):
+    for node in all_nodes:
         """ The Chimera graph is ID'd as follows:
 
             e.g. n = 4,
 
             x -->
 
-        y   00 01    02 03    04 05    06 07
-        |   08 09    10 11    12 13    14 15
-        v   16 17    18 19    20 21    22 23
-            24 25    26 27    28 29    30 31
+         y  00 04    08 12    16 20    24 28
+         |  01 05    09 13    17 21    25 29
+         v  02 06    10 14    18 22    26 30
+            03 07    11 15    19 23    27 31
+
+            32 36    40 44    48 52    56 60
+            33 37    41 45    49 53    57 61
+            34 38    42 46    50 54    58 62
+            35 39    43 47    51 55    59 63
+             ...      ...      ...      ...
 
         where the left entries are in the left graph, and the right
         entries are in the right graph (the vertically and horizontally-coupled
         nodes, respectively).
         """
-        x = (i // 2) % n
-        y = i // (2 * n)
-        z = 0 if i % 2 == 0 else 1
+        i = graph.get_id(node)
+        k = i % 4
 
-        W = 0.2
+        SPACING = 0.1
+        x = (i // 8) % n + (SPACING if k in (0, 2) else -SPACING)
+        y = i // (8 * n) + (SPACING if k in (0, 1) else -SPACING)
+        z = 0 if i % 8 < 4 else 1
 
-        magnet_frame = v.frame(frame=global_frame)
-        v.box(frame=magnet_frame, pos=(x + W / 2, y, z), size=(W, W, W), color=v.color.red)
-        v.box(frame=magnet_frame, pos=(x - W / 2, y, z), size=(W, W, W),
-            color=v.color.white)
-
-        magnet_frame.rotate(angle=node.value, axis=(0, 0, 1), origin=(x, y, z))
+        model = node.model()
+        model.pos = (x, y, z)
+        model.frame = global_frame
 
     # Draw links
     for node_a, node_b in all_edges:
         i = graph.get_id(node_a)
         j = graph.get_id(node_b)
 
-        x1 = (i // 2) % n
-        y1 = i // (2 * n)
-        z1 = 0 if i % 2 == 0 else 1
+        k1 = i % 4
+        k2 = j % 4
 
-        x2 = (j // 2) % n
-        y2 = j // (2 * n)
-        z2 = 0 if j % 2 == 0 else 1
+        x1 = (i // 8) % n + (SPACING if k1 in (0, 2) else -SPACING)
+        y1 = i // (8 * n) + (SPACING if k1 in (0, 1) else -SPACING)
+        z1 = 0 if i % 8 < 4 else 1
+
+        x2 = (j // 8) % n + (SPACING if k2 in (0, 2) else -SPACING)
+        y2 = j // (8 * n) + (SPACING if k2 in (0, 1) else -SPACING)
+        z2 = 0 if j % 8 < 4 else 1
 
         color = v.color.red if graph.get_spin(node_a, node_b) == 1 else v.color.blue
 
@@ -76,9 +94,48 @@ if __name__ == "__main__":
         center=(0, 0, 0))
     scene.forward = (0.5, 0.5, -1)
 
-    SCALE = 0.1
+    SCALE = 0.2
     scene.scale = (SCALE, SCALE, SCALE)
 
-    N = 8
+
+    N = 4
     g = make_chimera_graph(N)
-    draw_chimera_graph(g, N)
+
+    magnet_frames = []
+    draw_chimera_graph(g, N, magnet_frames)
+
+    TEMP = 0.22
+    problem = Problem(g, TEMP)
+
+    xs = []
+    ys = []
+    #screenshot_schedule = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1]
+    #screen_index = 0
+
+    #sleep(5)
+    while not problem.is_finished():
+        prev_time = problem._time
+        problem.iterate()
+
+        #if prev_time <= screenshot_schedule[screen_index] and \
+        #   problem._time >= screenshot_schedule[screen_index]:
+        #    getoutput("xwd -name \"Chimera Graph\" | convert xwd:- images/image_{0:03}.png".format(int(problem._time * 100)))
+        #    screen_index += 1
+
+        energy = problem.hamiltonian()
+        xs.append(problem._time)
+        ys.append(energy)
+        print(problem._time, energy)
+
+    xs = np.array(xs)
+    ys = np.array(ys)
+
+    np.save("times", xs)
+    np.save("energy", ys)
+
+    plt.title("Ground State Energy Over Time (A = A(1), B = B(1))")
+    plt.xlabel("Time $(t / t_f)$")
+    plt.ylabel("Energy (GHz)")
+    plt.plot(xs, ys)
+    plt.savefig("plot.png")
+    plt.show()
